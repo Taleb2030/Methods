@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Методы условной оптимизации</title>
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<style>
+body { font-family: Arial, sans-serif; margin: 20px; background: #f8f9fa; }
+.container { display: flex; flex-direction: column; gap: 25px; max-width: 1400px; margin: 0 auto; }
+.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+h1 { color: #2c3e50; margin: 0; }
+select { padding: 8px 15px; font-size: 16px; border: 2px solid #3498db; border-radius: 4px; background: white; }
+.plot-container { display: flex; gap: 30px; flex-wrap: wrap; }
+#plot { width: 700px; height: 600px; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+#table-container { flex: 1; min-width: 400px; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); padding: 15px; }
+table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+th, td { border: 1px solid #ddd; padding: 10px; text-align: center; }
+th { background-color: #3498db; color: white; font-weight: bold; }
+tr:nth-child(even) { background-color: #f2f2f2; }
+tr:hover { background-color: #e3f2fd; }
+.loading { text-align: center; padding: 20px; color: #7f8c8d; font-style: italic; }
+.footer { text-align: center; color: #7f8c8d; margin-top: 20px; font-size: 14px; }
+.input-form { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 15px; display: none; }
+.input-form.active { display: block; }
+.form-group { margin-bottom: 12px; }
+.form-group label { display: block; margin-bottom: 4px; font-weight: bold; color: #2c3e50; font-size: 14px; }
+.form-group input { width: 100%; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
+.form-group input[type="submit"] { background: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 4px; font-weight: bold; cursor: pointer; margin-top: 5px; }
+.form-group input[type="submit"]:hover { background: #2980b9; }
+.form-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.form-row > div { flex: 1; min-width: 180px; }
+.badge { display: inline-block; background: #27ae60; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-left: 8px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>Методы условной оптимизации <span class="badge">Live on GitHub</span></h1>
+    <select id="methodSelect">
+      <option value="penalty">1. Метод штрафных функций</option>
+      <option value="barrier">2. Метод барьерных функций</option>
+      <option value="combined">3. Комбинированный метод</option>
+      <option value="multipliers">4. Метод множителей</option>
+      <option value="exact_penalty">5. Метод точных штрафных функций</option>
+      <option value="gradient_proj">6. Метод проекции градиента</option>
+      <option value="zoutendijk">7. Метод Зойтендейка</option>
+    </select>
+  </div>
+
+  <div id="inputForms">
+    <div id="form_penalty" class="input-form">
+      <h3>Параметры метода штрафных функций</h3>
+      <form onsubmit="submitForm(event, 'penalty')">
+        <div class="form-group"><label>f(x₁,x₂):</label><input type="text" name="f" value="x1^2 + x2^2"></div>
+        <div class="form-group"><label>g(x₁,x₂) ≤ 0:</label><input type="text" name="g" value="x1 + x2 - 2"></div>
+        <div class="form-row">
+          <div class="form-group"><label>x₁⁰:</label><input type="number" name="x1_0" value="0.5" step="0.1"></div>
+          <div class="form-group"><label>x₂⁰:</label><input type="number" name="x2_0" value="0.5" step="0.1"></div>
+          <div class="form-group"><label>r₀:</label><input type="number" name="r0" value="1" step="0.1"></div>
+          <div class="form-group"><label>C:</label><input type="number" name="C" value="10" step="0.1"></div>
+          <div class="form-group"><label>Итерации:</label><input type="number" name="max_iter" value="6" min="1" max="20"></div>
+        </div>
+        <input type="submit" value="Выполнить метод штрафов">
+      </form>
+    </div>
+    <div id="form_barrier" class="input-form">
+      <h3>Параметры метода барьерных функций</h3>
+      <form onsubmit="submitForm(event, 'barrier')">
+        <div class="form-group"><label>f(x₁,x₂):</label><input type="text" name="f" value="x1^2 + x2^2"></div>
+        <div class="form-group"><label>g(x₁,x₂) &lt; 0:</label><input type="text" name="g" value="x1 + x2 - 2"></div>
+        <div class="form-row">
+          <div class="form-group"><label>x₁⁰:</label><input type="number" name="x1_0" value="0.5" step="0.1"></div>
+          <div class="form-group"><label>x₂⁰:</label><input type="number" name="x2_0" value="0.5" step="0.1"></div>
+          <div class="form-group"><label>r₀:</label><input type="number" name="r0" value="1" step="0.1"></div>
+          <div class="form-group"><label>C:</label><input type="number" name="C" value="4" step="0.1"></div>
+          <div class="form-group"><label>Итерации:</label><input type="number" name="max_iter" value="6" min="1" max="20"></div>
+        </div>
+        <input type="submit" value="Выполнить барьерный метод">
+      </form>
+    </div>
+    <div id="form_combined" class="input-form">
+      <h3>Параметры комбинированного метода</h3>
+      <form onsubmit="submitForm(event, 'combined')">
+        <div class="form-group"><label>f(x₁,x₂):</label><input type="text" name="f" value="x1^2 + x2^2"></div>
+        <div class="form-group"><label>g₁(x)=0:</label><input type="text" name="g1" value="x1 - 1"></div>
+        <div class="form-group"><label>g₂(x)≤0:</label><input type="text" name="g2" value="x1 + x2 - 2"></div>
+        <div class="form-row">
+          <div class="form-group"><label>x₁⁰:</label><input type="number" name="x1_0" value="0.5" step="0.1"></div>
+          <div class="form-group"><label>x₂⁰:</label><input type="number" name="x2_0" value="0.5" step="0.1"></div>
+          <div class="form-group"><label>r₀:</label><input type="number" name="r0" value="1" step="0.1"></div>
+          <div class="form-group"><label>C:</label><input type="number" name="C" value="4" step="0.1"></div>
+          <div class="form-group"><label>Итерации:</label><input type="number" name="max_iter" value="5" min="1" max="20"></div>
+        </div>
+        <input type="submit" value="Выполнить комбинированный метод">
+      </form>
+    </div>
+    <div id="form_multipliers" class="input-form">
+      <h3>Параметры метода множителей</h3>
+      <form onsubmit="submitForm(event, 'multipliers')">
+        <div class="form-group"><label>f(x₁,x₂):</label><input type="text" name="f" value="x1^2 + x2^2"></div>
+        <div class="form-group"><label>g(x₁,x₂) ≤ 0:</label><input type="text" name="g" value="x1 + x2 - 2"></div>
+        <div class="form-row">
+          <div class="form-group"><label>x₁⁰:</label><input type="number" name="x1_0" value="0.5" step="0.1"></div>
+          <div class="form-group"><label>x₂⁰:</label><input type="number" name="x2_0" value="0.5" step="0.1"></div>
+          <div class="form-group"><label>r₀:</label><input type="number" name="r0" value="1" step="0.1"></div>
+          <div class="form-group"><label>C:</label><input type="number" name="C" value="4" step="0.1"></div>
+          <div class="form-group"><label>μ₀:</label><input type="number" name="mu0" value="0" step="0.1"></div>
+          <div class="form-group"><label>Итерации:</label><input type="number" name="max_iter" value="6" min="1" max="20"></div>
+        </div>
+        <input type="submit" value="Выполнить метод множителей">
+      </form>
+    </div>
+    <div id="form_exact_penalty" class="input-form">
+      <h3>Параметры метода точных штрафных функций</h3>
+      <form onsubmit="submitForm(event, 'exact_penalty')">
+        <div class="form-group"><label>f(x₁,x₂):</label><input type="text" name="f" value="x1^2 + x2^2"></div>
+        <div class="form-group"><label>g(x₁,x₂) ≤ 0:</label><input type="text" name="g" value="x1 + x2 - 2"></div>
+        <div class="form-row">
+          <div class="form-group"><label>x₁⁰:</label><input type="number" name="x1_0" value="0.5" step="0.1"></div>
+          <div class="form-group"><label>x₂⁰:</label><input type="number" name="x2_0" value="0.5" step="0.1"></div>
+          <div class="form-group"><label>r₀:</label><input type="number" name="r0" value="0.5" step="0.1"></div>
+          <div class="form-group"><label>C:</label><input type="number" name="C" value="2" step="0.1"></div>
+          <div class="form-group"><label>Итерации:</label><input type="number" name="max_iter" value="7" min="1" max="20"></div>
+        </div>
+        <input type="submit" value="Выполнить точный штраф">
+      </form>
+    </div>
+    <div id="form_gradient_proj" class="input-form">
+      <h3>Метод проекции градиента</h3>
+      <form onsubmit="submitForm(event, 'gradient_proj')">
+        <div class="form-group"><label>f(x₁,x₂):</label><input type="text" name="f" value="(x1-4)^2 + (x2-5)^2"></div>
+        <div class="form-group"><label>g(x₁,x₂) ≤ 0:</label><input type="text" name="g" value="x1 + x2 - 1"></div>
+        <div class="form-row">
+          <div class="form-group"><label>x₁⁰:</label><input type="number" name="x1_0" value="0.7" step="0.1"></div>
+          <div class="form-group"><label>x₂⁰:</label><input type="number" name="x2_0" value="0.3" step="0.1"></div>
+          <div class="form-group"><label>Итерации:</label><input type="number" name="max_iter" value="15" min="1" max="50"></div>
+        </div>
+        <input type="submit" value="Выполнить проекцию градиента">
+      </form>
+    </div>
+    <div id="form_zoutendijk" class="input-form">
+      <h3>Метод Зойтендейка</h3>
+      <form onsubmit="submitForm(event, 'zoutendijk')">
+        <div class="form-group"><label>f(x₁,x₂):</label><input type="text" name="f" value="(x1-4)^2 + (x2-5)^2"></div>
+        <div class="form-group"><label>g₁(x) ≤ 0:</label><input type="text" name="g1" value="x1 + x2 - 1"></div>
+        <div class="form-group"><label>g₂(x) ≤ 0:</label><input type="text" name="g2" value="-x1"></div>
+        <div class="form-group"><label>g₃(x) ≤ 0:</label><input type="text" name="g3" value="-x2"></div>
+        <div class="form-row">
+          <div class="form-group"><label>x₁⁰:</label><input type="number" name="x1_0" value="0" step="0.1"></div>
+          <div class="form-group"><label>x₂⁰:</label><input type="number" name="x2_0" value="0.95" step="0.1"></div>
+          <div class="form-group"><label>ε:</label><input type="number" name="epsilon" value="0.03" step="0.01"></div>
+          <div class="form-group"><label>Итерации:</label><input type="number" name="max_iter" value="10" min="1" max="30"></div>
+        </div>
+        <input type="submit" value="Выполнить метод Зойтендейка">
+      </form>
+    </div>
+  </div>
+
+  <div class="plot-container">
+    <div id="plot"></div>
+    <div id="table-container">
+      <div id="tableTitle" style="font-weight:bold; margin-bottom:10px;"></div>
+      <div id="loading" class="loading">Выберите метод и нажмите "Выполнить"</div>
+      <table id="resultsTable" style="display:none;">
+        <thead id="tableHead"></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>Задача: минимизировать f(x) при ограничениях g(x) ≤ 0 (или = 0 для равенств)</p>
+    <p>На этой странице работают методы 1–2 в браузере. Для всех методов запустите C++ сервер из Visual Studio (localhost:8000).</p>
+  </div>
+</div>
+
+<script>
+// ----- Expression parser (x1, x2, +, -, *, /, ^, sin, cos, exp, log, sqrt) -----
+function parseExpr(expr, x1, x2) {
+  const s = expr.replace(/\s/g, '');
+  let pos = 0;
+  function skip() { while (pos < s.length && /[\s,]/.test(s[pos])) pos++; }
+  function num() {
+    skip();
+    let start = pos;
+    if (s[pos] === '-') pos++;
+    while (pos < s.length && /[0-9.]/.test(s[pos])) pos++;
+    if (start !== pos) return parseFloat(s.slice(start, pos)) || 0;
+    return null;
+  }
+  function varX() {
+    skip();
+    if (s.substr(pos, 2) === 'x1') { pos += 2; return x1; }
+    if (s.substr(pos, 2) === 'x2') { pos += 2; return x2; }
+    if (s[pos] === 'x') { pos++; return x1; }
+    return null;
+  }
+  function func() {
+    skip();
+    if (s.substr(pos, 3) === 'sin') { pos += 3; skip(); if (s[pos] === '(') pos++; const v = add(); if (s[pos] === ')') pos++; return Math.sin(v); }
+    if (s.substr(pos, 3) === 'cos') { pos += 3; skip(); if (s[pos] === '(') pos++; const v = add(); if (s[pos] === ')') pos++; return Math.cos(v); }
+    if (s.substr(pos, 3) === 'exp') { pos += 3; skip(); if (s[pos] === '(') pos++; const v = add(); if (s[pos] === ')') pos++; return Math.exp(v); }
+    if (s.substr(pos, 3) === 'log') { pos += 3; skip(); if (s[pos] === '(') pos++; const v = add(); if (s[pos] === ')') pos++; return Math.log(Math.max(v, 1e-10)); }
+    if (s.substr(pos, 4) === 'sqrt') { pos += 4; skip(); if (s[pos] === '(') pos++; const v = add(); if (s[pos] === ')') pos++; return Math.sqrt(Math.max(v, 0)); }
+    return null;
+  }
+  function factor() {
+    skip();
+    if (s[pos] === '(') { pos++; const v = add(); if (s[pos] === ')') pos++; return v; }
+    if (s[pos] === '-') { pos++; return -factor(); }
+    const n = num(); if (n !== null) return n;
+    const v = varX(); if (v !== null) return v;
+    const f = func(); if (f !== null) return f;
+    return 0;
+  }
+  function pow() {
+    let left = factor();
+    skip();
+    if (s[pos] === '^') { pos++; const right = pow(); left = Math.pow(left, right); }
+    return left;
+  }
+  function term() {
+    let left = pow();
+    for (;;) {
+      skip();
+      if (s[pos] === '*') { pos++; left *= term(); }
+      else if (s[pos] === '/') { pos++; left /= term(); }
+      else break;
+    }
+    return left;
+  }
+  function add() {
+    let left = term();
+    for (;;) {
+      skip();
+      if (s[pos] === '+') { pos++; left += term(); }
+      else if (s[pos] === '-') { pos++; left -= term(); }
+      else break;
+    }
+    return left;
+  }
+  return add();
+}
+
+// ----- In-browser: Penalty 2D -----
+function runPenaltyJS(params) {
+  const f_expr = params.get('f') || 'x1^2 + x2^2';
+  const g_expr = params.get('g') || 'x1 + x2 - 2';
+  let x1 = parseFloat(params.get('x1_0')) || 0.5, x2 = parseFloat(params.get('x2_0')) || 0.5;
+  let r = parseFloat(params.get('r0')) || 1, C = parseFloat(params.get('C')) || 10;
+  const N = Math.min(Math.max(parseInt(params.get('max_iter'), 10) || 6, 1), 20);
+  const f = (a, b) => parseExpr(f_expr, a, b);
+  const g = (a, b) => parseExpr(g_expr, a, b);
+  const F = (a, b, rr) => {
+    const gv = g(a, b);
+    return f(a, b) + 0.5 * rr * Math.pow(Math.max(0, gv), 2);
+  };
+  const h = 1e-6;
+  const gradF = (a, b, rr) => [
+    (F(a + h, b, rr) - F(a - h, b, rr)) / (2 * h),
+    (F(a, b + h, rr) - F(a, b - h, rr)) / (2 * h)
+  ];
+  const minimize = (a, b, rr) => {
+    for (let it = 0; it < 5000; it++) {
+      const [gx1, gx2] = gradF(a, b, rr);
+      let t = 1;
+      const f0 = F(a, b, rr);
+      let na, nb;
+      for (;;) {
+        na = a - t * gx1; nb = b - t * gx2;
+        if (F(na, nb, rr) < f0) break;
+        t *= 0.5;
+        if (t < 1e-10) return [a, b];
+      }
+      if (Math.hypot(na - a, nb - b) < 1e-6) return [na, nb];
+      a = na; b = nb;
+    }
+    return [a, b];
+  };
+  let csv = 'method,k,r,x1,x2,g,F\n';
+  for (let k = 0; k < N; k++) {
+    [x1, x2] = minimize(x1, x2, r);
+    const Fval = F(x1, x2, r), gv = g(x1, x2);
+    csv += `penalty,${k},${r},${x1},${x2},${gv},${Fval}\n`;
+    r *= C;
+  }
+  return csv;
+}
+
+// ----- In-browser: Barrier 2D -----
+function runBarrierJS(params) {
+  const f_expr = params.get('f') || 'x1^2 + x2^2';
+  const g_expr = params.get('g') || 'x1 + x2 - 2';
+  let x1 = parseFloat(params.get('x1_0')) || 0.5, x2 = parseFloat(params.get('x2_0')) || 0.5;
+  let r = parseFloat(params.get('r0')) || 1, C = parseFloat(params.get('C')) || 4;
+  const N = Math.min(Math.max(parseInt(params.get('max_iter'), 10) || 6, 1), 20);
+  const f = (a, b) => parseExpr(f_expr, a, b);
+  const g = (a, b) => parseExpr(g_expr, a, b);
+  if (g(x1, x2) >= 0) { x1 = 0.5; x2 = 0.5; }
+  const F = (a, b, rr) => {
+    const gv = g(a, b);
+    if (gv >= -1e-8) return 1e20;
+    return f(a, b) - rr / gv;
+  };
+  const h = 1e-6;
+  const gradF = (a, b, rr) => [
+    (F(a + h, b, rr) - F(a - h, b, rr)) / (2 * h),
+    (F(a, b + h, rr) - F(a, b - h, rr)) / (2 * h)
+  ];
+  const minimize = (a, b, rr) => {
+    for (let it = 0; it < 5000; it++) {
+      const [gx1, gx2] = gradF(a, b, rr);
+      let t = 1;
+      const f0 = F(a, b, rr);
+      let na, nb;
+      for (;;) {
+        na = a - t * gx1; nb = b - t * gx2;
+        if (F(na, nb, rr) < f0) break;
+        t *= 0.5;
+        if (t < 1e-10) return [a, b];
+      }
+      if (Math.hypot(na - a, nb - b) < 1e-6) return [na, nb];
+      a = na; b = nb;
+    }
+    return [a, b];
+  };
+  let csv = 'method,k,r,x1,x2,g,F\n';
+  for (let k = 0; k < N; k++) {
+    [x1, x2] = minimize(x1, x2, r);
+    const Fval = F(x1, x2, r), gv = g(x1, x2);
+    csv += `barrier,${k},${r},${x1},${x2},${gv},${Fval}\n`;
+    r /= C;
+  }
+  return csv;
+}
+
+function runInBrowser(method, formData) {
+  if (method === 'penalty') return runPenaltyJS(formData);
+  if (method === 'barrier') return runBarrierJS(formData);
+  return 'method,k,error\n' + method + ',0,Run the C++ app in Visual Studio (localhost:8000) for this method\n';
+}
+
+const methodInfo = {
+  penalty: { title: "1. Метод штрафных функций" },
+  barrier: { title: "2. Метод барьерных функций" },
+  combined: { title: "3. Комбинированный метод" },
+  multipliers: { title: "4. Метод множителей" },
+  exact_penalty: { title: "5. Метод точных штрафных функций" },
+  gradient_proj: { title: "6. Метод проекции градиента" },
+  zoutendijk: { title: "7. Метод Зойтендейка" }
+};
+
+function getCurrentMethod() {
+  return (new URLSearchParams(window.location.search)).get('method') || 'penalty';
+}
+
+document.getElementById('methodSelect').addEventListener('change', function() {
+  window.location.search = '?method=' + this.value;
+});
+
+function initUI(method) {
+  document.getElementById('methodSelect').value = method;
+  const info = methodInfo[method] || methodInfo.penalty;
+  document.getElementById('tableTitle').textContent = info.title;
+  document.querySelectorAll('.input-form').forEach(f => f.classList.remove('active'));
+  const form = document.getElementById('form_' + method);
+  if (form) form.classList.add('active');
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('resultsTable').style.display = 'none';
+}
+
+async function submitForm(event, method) {
+  event.preventDefault();
+  const formData = new FormData(event.target);
+  formData.append('method', method);
+  document.getElementById('loading').textContent = 'Вычисление...';
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('resultsTable').style.display = 'none';
+
+  try {
+    const response = await fetch('results.csv', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams(formData).toString()
+    });
+    if (response.ok) {
+      const text = await response.text();
+      if (text && text.trim().length >= 10) {
+        displayResults(method, text);
+        return;
+      }
+    }
+  } catch (e) {}
+  const csv = runInBrowser(method, formData);
+  displayResults(method, csv);
+}
+
+function displayResults(method, csvText) {
+  const rows = csvText.trim().split('\n');
+  if (rows.length < 2) {
+    document.getElementById('loading').textContent = 'Неверный формат CSV';
+    return;
+  }
+  const headers = rows[0].split(',');
+  document.getElementById('tableHead').innerHTML = '<tr>' + headers.slice(1).map(h => `<th>${h}</th>`).join('') + '</tr>';
+  const tableBody = document.getElementById('tableBody');
+  tableBody.innerHTML = '';
+  const plotData = { xs: [], ys: [], zs: [], ks: [] };
+  let is2D = false;
+  for (let i = 1; i < rows.length; i++) {
+    const cols = rows[i].split(',');
+    if (cols[0] !== method) continue;
+    let rowHtml = '<tr>';
+    for (let j = 1; j < cols.length; j++) {
+      const val = parseFloat(cols[j]);
+      rowHtml += `<td>${isNaN(val) ? cols[j] : val.toFixed(6)}</td>`;
+    }
+    tableBody.innerHTML += rowHtml;
+    plotData.ks.push(parseFloat(cols[1]));
+    const hasX1 = headers.includes('x1'), hasX2 = headers.includes('x2');
+    is2D = is2D || (hasX1 && hasX2);
+    if (hasX1 && hasX2) {
+      const x1_idx = headers.indexOf('x1'), x2_idx = headers.indexOf('x2'), F_idx = headers.indexOf('F');
+      if (x1_idx >= 0 && x2_idx >= 0 && F_idx >= 0) {
+        plotData.xs.push(parseFloat(cols[x1_idx]));
+        plotData.ys.push(parseFloat(cols[x2_idx]));
+        plotData.zs.push(parseFloat(cols[F_idx]));
+      }
+    } else {
+      const x_idx = headers.indexOf('x'), F_idx = headers.indexOf('F');
+      if (x_idx >= 0 && F_idx >= 0) {
+        plotData.xs.push(parseFloat(cols[x_idx]));
+        plotData.zs.push(parseFloat(cols[F_idx]));
+      }
+    }
+  }
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('resultsTable').style.display = 'table';
+  renderPlot(method, plotData, is2D);
+}
+
+function renderPlot(method, data, is2D) {
+  const plotDiv = document.getElementById('plot');
+  let traces = [];
+  let layout = { scene: { xaxis: { title: "x1" }, yaxis: { title: "x2" }, zaxis: { title: "f(x)" }, camera: { eye: { x: 1.8, y: 1.8, z: 1.2 } } }, margin: { r: 50, l: 50, b: 50, t: 50 }, height: 600, width: 700 };
+  if (is2D && data.xs.length > 0) {
+    const X = [], Y = [], Z = [];
+    for (let x = -1; x <= 2; x += 0.1) {
+      const rx = [], ry = [], rz = [];
+      for (let y = -1; y <= 2; y += 0.1) {
+        rx.push(x); ry.push(y); rz.push(x * x + y * y);
+      }
+      X.push(rx); Y.push(ry); Z.push(rz);
+    }
+    traces.push({ type: "surface", x: X, y: Y, z: Z, colorscale: "Blues", opacity: 0.85, name: "f(x1,x2)" });
+    const xc = [], yc = [], zc = [];
+    for (let x = -1; x <= 2; x += 0.05) {
+      const y = 2 - x;
+      if (y >= -1 && y <= 2) { xc.push(x); yc.push(y); zc.push(x * x + y * y); }
+    }
+    traces.push({ type: "scatter3d", x: xc, y: yc, z: zc, mode: "lines", line: { color: "orange", width: 4 }, name: "Constraint g(x)=0" });
+    traces.push({ type: "scatter3d", x: data.xs, y: data.ys, z: data.zs, mode: "lines+markers", marker: { size: 5, color: "black" }, line: { width: 4, color: "darkblue" }, name: "Iterations" });
+    traces.push({ type: "scatter3d", x: [1], y: [1], z: [2], mode: "markers+text", marker: { size: 10, color: "red" }, text: ["Exact min (1,1)"], textposition: "top center", name: "Exact" });
+  } else {
+    traces.push({ type: "scatter", x: data.ks, y: data.zs.length ? data.zs : data.xs, mode: "lines+markers", name: "Iterations" });
+    layout = { xaxis: { title: "k" }, yaxis: { title: "value" }, height: 600, width: 700 };
+  }
+  Plotly.newPlot(plotDiv, traces, layout, { responsive: true });
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  const method = getCurrentMethod();
+  initUI(method);
+  setTimeout(() => {
+    const form = document.querySelector('#form_' + method + ' form');
+    if (form) form.requestSubmit();
+  }, 300);
+});
+</script>
+</body>
+</html>
