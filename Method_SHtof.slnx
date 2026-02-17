@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="Method_SHtof/Method_SHtof.vcxproj" Id="29b8d02d-ec36-4549-a587-b3665aad53b5" />
+</Solution>

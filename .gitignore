@@ -1,0 +1,40 @@
+﻿# Compiled Object files
+*.obj
+*.o
+
+# Executables
+*.exe
+*.dll
+*.ilk
+*.pdb
+*.exp
+*.lib
+
+# Visual Studio files
+.vs/
+Debug/
+Release/
+x64/
+x86/
+*.user
+*.suo
+*.sdf
+*.opensdf
+*.opendb
+*.VC.db
+
+# Build results
+[Dd]ebug/
+[Rr]elease/
+*.log
+*.tlb
+*.tli
+*.tlh
+*.tmp
+*.psess
+*.vsp
+*.vspx
+*.ipch
+
+# Generated files
+results.csv

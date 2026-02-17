@@ -1,0 +1,56 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Optimization Methods</title>
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<style>
+body{font-family:Arial;margin:20px;}
+.container{display:flex;gap:30px;}
+table{border-collapse:collapse;}
+th,td{border:1px solid #333;padding:6px 12px;text-align:center;}
+th{background:#eee;}
+#plot{width:600px;height:500px;}
+</style>
+</head>
+<body>
+
+<h2>Constrained Optimization</h2>
+
+<form method="GET">
+<select name="method">
+<option value="1">Penalty</option>
+<option value="2">Barrier</option>
+<option value="3">Zoutendijk</option>
+</select>
+<button type="submit">Run</button>
+</form>
+
+<h3>Zoutendijk Method</h3>
+
+<div class="container">
+<div id="plot"></div>
+
+<table>
+<tr><th>k</th><th>a</th><th>b</th><th>c</th><th>d</th></tr>
+<tr><td>0</td><td>0.32</td><td>0.68</td><td>32.2048</td><td>0</td></tr><tr><td>1</td><td>0.128</td><td>0.872</td><td>32.0328</td><td>0</td></tr><tr><td>2</td><td>0.0512</td><td>0.9488</td><td>32.0052</td><td>2.22045e-16</td></tr><tr><td>3</td><td>0.02048</td><td>0.97952</td><td>32.0008</td><td>2.22045e-16</td></tr><tr><td>4</td><td>0.008192</td><td>0.991808</td><td>32.0001</td><td>2.22045e-16</td></tr><tr><td>5</td><td>0.0032768</td><td>0.996723</td><td>32</td><td>2.22045e-16</td></tr><tr><td>6</td><td>0.00131072</td><td>0.998689</td><td>32</td><td>2.22045e-16</td></tr><tr><td>7</td><td>0.000524288</td><td>0.999476</td><td>32</td><td>2.22045e-16</td></tr><tr><td>8</td><td>0.000209715</td><td>0.99979</td><td>32</td><td>2.22045e-16</td></tr><tr><td>9</td><td>8.38861e-05</td><td>0.999916</td><td>32</td><td>2.22045e-16</td></tr><tr><td>10</td><td>3.35544e-05</td><td>0.999966</td><td>32</td><td>4.44089e-16</td></tr><tr><td>11</td><td>1.34218e-05</td><td>0.999987</td><td>32</td><td>4.44089e-16</td></tr><tr><td>12</td><td>5.36871e-06</td><td>0.999995</td><td>32</td><td>4.44089e-16</td></tr><tr><td>13</td><td>2.14748e-06</td><td>0.999998</td><td>32</td><td>4.44089e-16</td></tr><tr><td>14</td><td>8.58993e-07</td><td>0.999999</td><td>32</td><td>4.44089e-16</td></tr>
+</table>
+</div>
+
+<script>
+const rows = [[0.32,32.2048],[0.128,32.0328],[0.0512,32.0052],[0.02048,32.0008],[0.008192,32.0001],[0.0032768,32],[0.00131072,32],[0.000524288,32],[0.000209715,32],[8.38861e-05,32],[3.35544e-05,32],[1.34218e-05,32],[5.36871e-06,32],[2.14748e-06,32],[8.58993e-07,32],];
+
+Plotly.newPlot("plot", [{
+  x: rows.map(r=>r[0]),
+  y: rows.map(r=>r[1]),
+  mode:"lines+markers",
+  type:"scatter"
+}],{
+  xaxis:{title:"x"},
+  yaxis:{title:"value"}
+});
+</script>
+
+</body>
+</html>
