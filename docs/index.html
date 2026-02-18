@@ -170,7 +170,7 @@ tr:hover { background-color: #e3f2fd; }
 
   <div class="footer">
     <p>Задача: минимизировать f(x) при ограничениях g(x) ≤ 0 (или = 0 для равенств)</p>
-    <p>На этой странице работают методы 1–2 в браузере. Для всех методов запустите C++ сервер из Visual Studio (localhost:8000).</p>
+    <p>Все 7 методов работают в браузере. Можно также запустить C++ сервер в Visual Studio (localhost:8000).</p>
   </div>
 </div>
 
@@ -334,10 +334,281 @@ function runBarrierJS(params) {
   return csv;
 }
 
+// ----- In-browser: Exact Penalty 2D -----
+function runExactPenaltyJS(params) {
+  const f_expr = params.get('f') || 'x1^2 + x2^2';
+  const g_expr = params.get('g') || 'x1 + x2 - 2';
+  let x1 = parseFloat(params.get('x1_0')) || 0.5, x2 = parseFloat(params.get('x2_0')) || 0.5;
+  let r = parseFloat(params.get('r0')) || 0.5, C = parseFloat(params.get('C')) || 2;
+  const N = Math.min(Math.max(parseInt(params.get('max_iter'), 10) || 7, 1), 20);
+  const f = (a, b) => parseExpr(f_expr, a, b);
+  const g = (a, b) => parseExpr(g_expr, a, b);
+  const F = (a, b, rr) => f(a, b) + rr * Math.max(0, g(a, b));
+  const h = 1e-6;
+  const gradF = (a, b, rr) => [
+    (F(a + h, b, rr) - F(a - h, b, rr)) / (2 * h),
+    (F(a, b + h, rr) - F(a, b - h, rr)) / (2 * h)
+  ];
+  const minimize = (a, b, rr) => {
+    for (let it = 0; it < 5000; it++) {
+      const [gx1, gx2] = gradF(a, b, rr);
+      let t = 1, f0 = F(a, b, rr);
+      let na, nb;
+      for (;;) {
+        na = a - t * gx1; nb = b - t * gx2;
+        if (F(na, nb, rr) < f0) break;
+        t *= 0.5;
+        if (t < 1e-10) return [a, b];
+      }
+      if (Math.hypot(na - a, nb - b) < 1e-6) return [na, nb];
+      a = na; b = nb;
+    }
+    return [a, b];
+  };
+  let csv = 'method,k,r,x1,x2,g,F\n';
+  for (let k = 0; k < N; k++) {
+    [x1, x2] = minimize(x1, x2, r);
+    csv += `exact_penalty,${k},${r},${x1},${x2},${g(x1, x2)},${F(x1, x2, r)}\n`;
+    r *= C;
+  }
+  return csv;
+}
+
+// ----- In-browser: Combined (equality g1=0 + inequality g2<0) -----
+function runCombinedJS(params) {
+  const f_expr = params.get('f') || 'x1^2 + x2^2';
+  const g1_expr = params.get('g1') || 'x1 - 1';
+  const g2_expr = params.get('g2') || 'x1 + x2 - 2';
+  let x1 = parseFloat(params.get('x1_0')) || 0.5, x2 = parseFloat(params.get('x2_0')) || 0.5;
+  let r = parseFloat(params.get('r0')) || 1, C = parseFloat(params.get('C')) || 4;
+  const N = Math.min(Math.max(parseInt(params.get('max_iter'), 10) || 5, 1), 20);
+  const f = (a, b) => parseExpr(f_expr, a, b);
+  const g1 = (a, b) => parseExpr(g1_expr, a, b);
+  const g2 = (a, b) => parseExpr(g2_expr, a, b);
+  if (g2(x1, x2) >= 0) { x1 = 0.5; x2 = 0.5; }
+  const F = (a, b, rr) => {
+    const eq = g1(a, b), ineq = g2(a, b);
+    if (ineq >= 0) return 1e20;
+    return f(a, b) + 0.5 * eq * eq / rr - rr * Math.log(-ineq);
+  };
+  const h = 1e-6;
+  const minimize = (a, b, rr) => {
+    for (let it = 0; it < 5000; it++) {
+      const gx1 = (F(a + h, b, rr) - F(a - h, b, rr)) / (2 * h);
+      const gx2 = (F(a, b + h, rr) - F(a, b - h, rr)) / (2 * h);
+      let t = 1, f0 = F(a, b, rr);
+      let na, nb;
+      for (;;) {
+        na = a - t * gx1; nb = b - t * gx2;
+        if (g2(na, nb) < 0 && F(na, nb, rr) < f0) break;
+        t *= 0.5;
+        if (t < 1e-10) return [a, b];
+      }
+      if (Math.hypot(na - a, nb - b) < 1e-6) return [na, nb];
+      a = na; b = nb;
+    }
+    return [a, b];
+  };
+  let csv = 'method,k,r,x1,x2,g1,g2,F\n';
+  for (let k = 0; k < N; k++) {
+    [x1, x2] = minimize(x1, x2, r);
+    csv += `combined,${k},${r},${x1},${x2},${g1(x1, x2)},${g2(x1, x2)},${F(x1, x2, r)}\n`;
+    r /= C;
+  }
+  return csv;
+}
+
+// ----- In-browser: Multipliers 2D -----
+function runMultipliersJS(params) {
+  const f_expr = params.get('f') || 'x1^2 + x2^2';
+  const g_expr = params.get('g') || 'x1 + x2 - 2';
+  let x1 = parseFloat(params.get('x1_0')) || 0.5, x2 = parseFloat(params.get('x2_0')) || 0.5;
+  let r = parseFloat(params.get('r0')) || 1, C = parseFloat(params.get('C')) || 4;
+  let mu = parseFloat(params.get('mu0')) || 0;
+  const N = Math.min(Math.max(parseInt(params.get('max_iter'), 10) || 6, 1), 20);
+  const f = (a, b) => parseExpr(f_expr, a, b);
+  const g = (a, b) => parseExpr(g_expr, a, b);
+  const L = (a, b, rr) => {
+    const gv = g(a, b);
+    const term = Math.max(0, mu + rr * gv);
+    return f(a, b) + (term * term - mu * mu) / (2 * rr);
+  };
+  const h = 1e-6;
+  const gradL = (a, b, rr) => [
+    (L(a + h, b, rr) - L(a - h, b, rr)) / (2 * h),
+    (L(a, b + h, rr) - L(a, b - h, rr)) / (2 * h)
+  ];
+  const minimize = (a, b, rr) => {
+    for (let it = 0; it < 5000; it++) {
+      const [gx1, gx2] = gradL(a, b, rr);
+      let t = 1, f0 = L(a, b, rr);
+      let na, nb;
+      for (;;) {
+        na = a - t * gx1; nb = b - t * gx2;
+        if (L(na, nb, rr) < f0) break;
+        t *= 0.5;
+        if (t < 1e-10) return [a, b];
+      }
+      if (Math.hypot(na - a, nb - b) < 1e-6) return [na, nb];
+      a = na; b = nb;
+    }
+    return [a, b];
+  };
+  let csv = 'method,k,r,x1,x2,g,F,mu\n';
+  for (let k = 0; k < N; k++) {
+    [x1, x2] = minimize(x1, x2, r);
+    const gv = g(x1, x2);
+    csv += `multipliers,${k},${r},${x1},${x2},${gv},${L(x1, x2, r)},${mu}\n`;
+    mu = Math.max(0, mu + r * gv);
+    r *= C;
+  }
+  return csv;
+}
+
+// ----- In-browser: Gradient Projection 2D -----
+function runGradientProjJS(params) {
+  const f_expr = params.get('f') || '(x1-4)^2 + (x2-5)^2';
+  const g_expr = params.get('g') || 'x1 + x2 - 1';
+  let x1 = parseFloat(params.get('x1_0')) || 0.7, x2 = parseFloat(params.get('x2_0')) || 0.3;
+  const N = Math.min(Math.max(parseInt(params.get('max_iter'), 10) || 15, 1), 30);
+  const f = (a, b) => parseExpr(f_expr, a, b);
+  const g = (a, b) => parseExpr(g_expr, a, b);
+  const h = 1e-6;
+  const getA = (a, b) => [
+    (g(a + h, b) - g(a - h, b)) / (2 * h),
+    (g(a, b + h) - g(a, b - h)) / (2 * h)
+  ];
+  const projectGrad = (a, b, df1, df2) => {
+    const [a1, a2] = getA(a, b);
+    const denom = a1 * a1 + a2 * a2 + 1e-12;
+    const coef = (a1 * df1 + a2 * df2) / denom;
+    return [df1 - coef * a1, df2 - coef * a2];
+  };
+  const correction = (a, b) => {
+    const [a1, a2] = getA(a, b);
+    const denom = a1 * a1 + a2 * a2 + 1e-12;
+    const tau = -g(a, b);
+    const lam = tau / denom;
+    return [a1 * lam, a2 * lam];
+  };
+  const lineSearch = (a, b, d1, d2) => {
+    let alpha = 1;
+    const f0 = f(a, b);
+    for (let i = 0; i < 20; i++) {
+      if (f(a + alpha * d1, b + alpha * d2) < f0) return alpha;
+      alpha *= 0.5;
+    }
+    return 0;
+  };
+  let csv = 'method,k,x1,x2,g,fx\n';
+  for (let k = 0; k < N; k++) {
+    const df1 = (f(x1 + h, x2) - f(x1 - h, x2)) / (2 * h);
+    const df2 = (f(x1, x2 + h) - f(x1, x2 - h)) / (2 * h);
+    const [pd1, pd2] = projectGrad(x1, x2, df1, df2);
+    const d1 = -pd1, d2 = -pd2;
+    const t = lineSearch(x1, x2, d1, d2);
+    const [c1, c2] = correction(x1 + t * d1, x2 + t * d2);
+    x1 = x1 + t * d1 + c1;
+    x2 = x2 + t * d2 + c2;
+    csv += `gradient_proj,${k},${x1},${x2},${g(x1, x2)},${f(x1, x2)}\n`;
+    if (Math.hypot(c1, c2) < 1e-6 && Math.hypot(pd1, pd2) < 1e-6) break;
+  }
+  return csv;
+}
+
+// ----- In-browser: Zoutendijk 2D -----
+function runZoutendijkJS(params) {
+  const f_expr = params.get('f') || '(x1-4)^2 + (x2-5)^2';
+  const g1_expr = params.get('g1') || 'x1 + x2 - 1';
+  const g2_expr = params.get('g2') || '-x1';
+  const g3_expr = params.get('g3') || '-x2';
+  let x1 = parseFloat(params.get('x1_0')) || 0, x2 = parseFloat(params.get('x2_0')) || 0.95;
+  let eps = parseFloat(params.get('epsilon')) || 0.03;
+  const N = Math.min(Math.max(parseInt(params.get('max_iter'), 10) || 10, 1), 30);
+  const f = (a, b) => parseExpr(f_expr, a, b);
+  const g1 = (a, b) => parseExpr(g1_expr, a, b);
+  const g2 = (a, b) => parseExpr(g2_expr, a, b);
+  const g3 = (a, b) => parseExpr(g3_expr, a, b);
+  const constraints = [g1, g2, g3];
+  const grad = (func, a, b) => [
+    (func(a + 1e-6, b) - func(a - 1e-6, b)) / 2e-6,
+    (func(a, b + 1e-6) - func(a, b - 1e-6)) / 2e-6
+  ];
+  const findDirection = (active) => {
+    const [df1, df2] = grad(f, x1, x2);
+    const activeGrads = active.map(j => grad(constraints[j], x1, x2));
+    if (active.length === 0) {
+      const norm = Math.hypot(df1, df2);
+      if (norm > 1e-12) return { d1: -df1 / norm, d2: -df2 / norm, z: df1 * (-df1 / norm) + df2 * (-df2 / norm) };
+      return { d1: 0, d2: 0, z: 0 };
+    }
+    let bestZ = 1e20, bestD1 = 0, bestD2 = 0;
+    for (let i = 0; i < 200; i++) {
+      const angle = 2 * Math.PI * i / 200;
+      const td1 = Math.cos(angle), td2 = Math.sin(angle);
+      let z = df1 * td1 + df2 * td2;
+      activeGrads.forEach(([ag1, ag2]) => { z = Math.max(z, ag1 * td1 + ag2 * td2); });
+      if (z < bestZ) { bestZ = z; bestD1 = td1; bestD2 = td2; }
+    }
+    return { d1: bestD1, d2: bestD2, z: bestZ };
+  };
+  const lineSearch = (d1, d2, tMax) => {
+    const f0 = f(x1, x2);
+    for (let iter = 0; iter < 20; iter++) {
+      const tt = tMax * Math.pow(0.7, iter);
+      const nx1 = x1 + tt * d1, nx2 = x2 + tt * d2;
+      if (constraints.every(c => c(nx1, nx2) <= 1e-6) && f(nx1, nx2) < f0) return tt;
+    }
+    return 0;
+  };
+  let csv = 'method,k,x1,x2,z,fx,g1,g2,g3\n';
+  let wrote = false;
+  for (let k = 0; k < N; k++) {
+    const gvals = [g1(x1, x2), g2(x1, x2), g3(x1, x2)];
+    const active = gvals.map((v, j) => v >= -eps ? j : -1).filter(j => j >= 0);
+    const { d1, d2, z } = findDirection(active);
+    if (z >= -eps) {
+      csv += `zoutendijk,${k},${x1},${x2},${z},${f(x1, x2)},${gvals[0]},${gvals[1]},${gvals[2]}\n`;
+      wrote = true;
+      break;
+    }
+    let tMax = 1e6;
+    for (let j = 0; j < 3; j++) {
+      if (gvals[j] >= -eps) continue;
+      const [dg1, dg2] = grad(constraints[j], x1, x2);
+      const deriv = dg1 * d1 + dg2 * d2;
+      if (deriv < 0) {
+        const tj = -gvals[j] / deriv;
+        if (tj < tMax) tMax = tj;
+      }
+    }
+    tMax = Math.min(tMax, 10);
+    const t = lineSearch(d1, d2, tMax);
+    if (t <= 1e-12) break;
+    x1 += t * d1;
+    x2 += t * d2;
+    const gv1 = g1(x1, x2), gv2 = g2(x1, x2), gv3 = g3(x1, x2);
+    csv += `zoutendijk,${k},${x1},${x2},${z},${f(x1, x2)},${gv1},${gv2},${gv3}\n`;
+    wrote = true;
+    eps *= 0.9;
+    if (eps < 1e-8) eps = 1e-8;
+  }
+  if (!wrote) {
+    const gv1 = g1(x1, x2), gv2 = g2(x1, x2), gv3 = g3(x1, x2);
+    csv += `zoutendijk,0,${x1},${x2},0,${f(x1, x2)},${gv1},${gv2},${gv3}\n`;
+  }
+  return csv;
+}
+
 function runInBrowser(method, formData) {
   if (method === 'penalty') return runPenaltyJS(formData);
   if (method === 'barrier') return runBarrierJS(formData);
-  return 'method,k,error\n' + method + ',0,Run the C++ app in Visual Studio (localhost:8000) for this method\n';
+  if (method === 'exact_penalty') return runExactPenaltyJS(formData);
+  if (method === 'combined') return runCombinedJS(formData);
+  if (method === 'multipliers') return runMultipliersJS(formData);
+  if (method === 'gradient_proj') return runGradientProjJS(formData);
+  if (method === 'zoutendijk') return runZoutendijkJS(formData);
+  return 'method,k,error\n' + method + ',0,Unknown method\n';
 }
 
 const methodInfo = {
@@ -420,14 +691,16 @@ function displayResults(method, csvText) {
     const hasX1 = headers.includes('x1'), hasX2 = headers.includes('x2');
     is2D = is2D || (hasX1 && hasX2);
     if (hasX1 && hasX2) {
-      const x1_idx = headers.indexOf('x1'), x2_idx = headers.indexOf('x2'), F_idx = headers.indexOf('F');
+      const x1_idx = headers.indexOf('x1'), x2_idx = headers.indexOf('x2');
+      const F_idx = headers.indexOf('F') >= 0 ? headers.indexOf('F') : headers.indexOf('fx');
       if (x1_idx >= 0 && x2_idx >= 0 && F_idx >= 0) {
         plotData.xs.push(parseFloat(cols[x1_idx]));
         plotData.ys.push(parseFloat(cols[x2_idx]));
         plotData.zs.push(parseFloat(cols[F_idx]));
       }
     } else {
-      const x_idx = headers.indexOf('x'), F_idx = headers.indexOf('F');
+      const x_idx = headers.indexOf('x');
+      const F_idx = headers.indexOf('F') >= 0 ? headers.indexOf('F') : headers.indexOf('fx');
       if (x_idx >= 0 && F_idx >= 0) {
         plotData.xs.push(parseFloat(cols[x_idx]));
         plotData.zs.push(parseFloat(cols[F_idx]));
@@ -443,24 +716,30 @@ function renderPlot(method, data, is2D) {
   const plotDiv = document.getElementById('plot');
   let traces = [];
   let layout = { scene: { xaxis: { title: "x1" }, yaxis: { title: "x2" }, zaxis: { title: "f(x)" }, camera: { eye: { x: 1.8, y: 1.8, z: 1.2 } } }, margin: { r: 50, l: 50, b: 50, t: 50 }, height: 600, width: 700 };
+  const isGradOrZout = (method === 'gradient_proj' || method === 'zoutendijk');
   if (is2D && data.xs.length > 0) {
     const X = [], Y = [], Z = [];
-    for (let x = -1; x <= 2; x += 0.1) {
+    const xMin = isGradOrZout ? -1 : -1, xMax = isGradOrZout ? 5 : 2, yMin = -1, yMax = isGradOrZout ? 5 : 2;
+    const step = isGradOrZout ? 0.2 : 0.1;
+    const surf = (a, b) => isGradOrZout ? (a - 4) * (a - 4) + (b - 5) * (b - 5) : a * a + b * b;
+    for (let x = xMin; x <= xMax; x += step) {
       const rx = [], ry = [], rz = [];
-      for (let y = -1; y <= 2; y += 0.1) {
-        rx.push(x); ry.push(y); rz.push(x * x + y * y);
+      for (let y = yMin; y <= yMax; y += step) {
+        rx.push(x); ry.push(y); rz.push(surf(x, y));
       }
       X.push(rx); Y.push(ry); Z.push(rz);
     }
     traces.push({ type: "surface", x: X, y: Y, z: Z, colorscale: "Blues", opacity: 0.85, name: "f(x1,x2)" });
     const xc = [], yc = [], zc = [];
-    for (let x = -1; x <= 2; x += 0.05) {
-      const y = 2 - x;
-      if (y >= -1 && y <= 2) { xc.push(x); yc.push(y); zc.push(x * x + y * y); }
+    const lineY = isGradOrZout ? (x => 1 - x) : (x => 2 - x);
+    for (let x = xMin; x <= xMax; x += 0.05) {
+      const y = lineY(x);
+      if (y >= yMin && y <= yMax) { xc.push(x); yc.push(y); zc.push(surf(x, y)); }
     }
-    traces.push({ type: "scatter3d", x: xc, y: yc, z: zc, mode: "lines", line: { color: "orange", width: 4 }, name: "Constraint g(x)=0" });
+    traces.push({ type: "scatter3d", x: xc, y: yc, z: zc, mode: "lines", line: { color: "orange", width: 4 }, name: "Constraint" });
     traces.push({ type: "scatter3d", x: data.xs, y: data.ys, z: data.zs, mode: "lines+markers", marker: { size: 5, color: "black" }, line: { width: 4, color: "darkblue" }, name: "Iterations" });
-    traces.push({ type: "scatter3d", x: [1], y: [1], z: [2], mode: "markers+text", marker: { size: 10, color: "red" }, text: ["Exact min (1,1)"], textposition: "top center", name: "Exact" });
+    const ex = isGradOrZout ? 0 : 1, ey = isGradOrZout ? 1 : 1, ez = isGradOrZout ? 17 : 2;
+    traces.push({ type: "scatter3d", x: [ex], y: [ey], z: [ez], mode: "markers+text", marker: { size: 10, color: "red" }, text: [isGradOrZout ? "Exact (0,1)" : "Exact (1,1)"], textposition: "top center", name: "Exact" });
   } else {
     traces.push({ type: "scatter", x: data.ks, y: data.zs.length ? data.zs : data.xs, mode: "lines+markers", name: "Iterations" });
     layout = { xaxis: { title: "k" }, yaxis: { title: "value" }, height: 600, width: 700 };
